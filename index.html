@@ -190,6 +190,47 @@ function playFC() {
   _fc.timer=setTimeout(playFC,dur*1000-60);
 }
 
+// ── Music: Gameplay (action loop) ─────────────────────
+const _gm = { timer:null, nodes:[] };
+function stopGameMusic() {
+  clearTimeout(_gm.timer); _gm.timer=null;
+  _gm.nodes.forEach(o=>{try{o.stop();}catch(e){}});
+  _gm.nodes=[];
+}
+function playGameMusic() {
+  if(!AC) return;
+  stopGameMusic();
+  // Fast-paced action melody ~140 BPM (8-note loop)
+  const bpm=140, b=60/bpm, e=b/2, q=b;
+  const n={
+    C4:261.63, D4:293.66, E4:329.63, F4:349.23,
+    G4:392.00, A4:440.00, Bb4:466.16, C5:523.25
+  };
+  // Urgent 8-note ascending/descending phrase
+  const mel=[
+    [n.C4,e],[n.E4,e],[n.G4,e],[n.C5,e],
+    [n.Bb4,e],[n.G4,e],[n.E4,e],[n.D4,q]
+  ];
+  const dur=mel.reduce((s,[,d])=>s+d,0);
+  function sched(fr,dt,dl,vol,type='square'){
+    const o=AC.createOscillator(),g=AC.createGain();
+    o.connect(g);g.connect(AC.destination);
+    o.type=type;o.frequency.value=fr;
+    const t=AC.currentTime+dl;
+    g.gain.setValueAtTime(0.001,t);
+    g.gain.linearRampToValueAtTime(vol,t+0.01);
+    g.gain.setValueAtTime(vol*0.6,t+dt*0.5);
+    g.gain.exponentialRampToValueAtTime(0.001,t+dt);
+    o.start(t);o.stop(t+dt+0.03);
+    _gm.nodes.push(o);
+  }
+  let t=0;
+  mel.forEach(([f,d])=>{sched(f,d,t,0.10);t+=d;});
+  // Driving bass (root note pulsing every beat)
+  for(let i=0;i<4;i++) sched(n.C4/2,e*0.9,i*q,0.06,'sawtooth');
+  _gm.timer=setTimeout(playGameMusic,dur*1000-40);
+}
+
 // ── Palette ─────────────────────────────────────────────
 const SKY = ['#3898F0','#201898','#98380C','#084808','#5820B0','#085858'];
 const MTN = ['#2050C0','#1010A0','#803010','#105010','#481898','#0C7070'];
@@ -867,6 +908,7 @@ let gs = { state:'title', round:0, twoPlayer:false, players:[], world:null,
 
 function initGame(twoPlayer, chars) {
   stopFC();
+  initAC(); playGameMusic();
   gs.twoPlayer = twoPlayer;
   gs.round = 0;
   gs.players = [];
@@ -1119,6 +1161,9 @@ function loop(ts) {
   }
 
   else if(gs.state==='playing') {
+    // Pause toggle
+    if(jp('KeyP') || jp('Escape')) { gs.state='paused'; }
+
     const world = gs.world;
     const players = gs.players;
 
@@ -1144,7 +1189,7 @@ function loop(ts) {
 
     // Check game over: all players dead with 0 lives
     const allDead = players.every(p=>!p.alive&&p.lives<=0);
-    if(allDead){ gs.state='gameover'; gs.tick=0; }
+    if(allDead){ gs.state='gameover'; gs.tick=0; stopGameMusic(); initAC(); playFC(); }
 
     world.update();
     gs.camY = updateCamera(gs.camY, players, world, dt);
@@ -1161,11 +1206,25 @@ function loop(ts) {
     X.fillStyle='#000040'; X.fillRect(progX,16,4,progH);
     players.forEach((p,i)=>{
       const pct = 1-(p.wy/maxH);
-      X.fillStyle = i===0?CHARS[p.charIdx].body:CHARS[p.charIdx].body;
+      X.fillStyle = i===0 ? CHARS[p.charIdx].body : CHARS[p.charIdx].accent;
       X.fillRect(progX, 16+progH-(pct*progH)|0, 4, 4);
     });
     // Summit marker
     X.fillStyle='#F8D800'; X.fillRect(progX-1,14,6,2);
+  }
+
+  else if(gs.state==='paused') {
+    // Draw the frozen world
+    gs.world.draw(gs.camY, gs.round);
+    gs.players.forEach(p=>p.draw(gs.camY));
+    drawHUD(gs.players, gs.round, gs.twoPlayer);
+    // Semi-transparent overlay
+    X.fillStyle='rgba(0,0,0,0.6)'; X.fillRect(0,0,NW,NH);
+    // Pause text
+    drawCenteredText('PAUSA', NH/2-14, '#F8D800', 16);
+    drawCenteredText('P / ESC para continuar', NH/2+8, '#F8F8F8', 7);
+    // Resume
+    if(jp('KeyP') || jp('Escape')) { gs.state='playing'; }
   }
 
   else if(gs.state==='bonus') {
