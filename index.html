@@ -544,19 +544,25 @@ const iceParticles = [];
 class IceParticle {
   constructor(wx,wy){
     this.wx=wx; this.wy=wy;
-    this.vx=(Math.random()-0.5)*4; this.vy=-Math.random()*3-1;
-    this.life=30+Math.random()*20|0; this.maxLife=this.life;
-    this.col=Math.random()<0.5?'#A0D8F8':'#D8F4FF';
+    this.vx=(Math.random()-0.5)*5;
+    this.vy=Math.random()*2+0.5; // cae hacia abajo (visible al jugador)
+    this.life=40+Math.random()*20|0; this.maxLife=this.life;
+    const cols=['#A0D8F8','#D8F4FF','#FFFFFF','#6898C0'];
+    this.col=cols[Math.floor(Math.random()*cols.length)];
+    this.size=Math.random()<0.4?4:3;
   }
-  update(){ this.vy+=0.2; this.wx+=this.vx; this.wy+=this.vy; this.life--; }
+  update(){ this.vy+=0.15; this.wx+=this.vx; this.wy+=this.vy; this.life--; }
   draw(camY){
     if(this.life<=0)return;
     X.globalAlpha=this.life/this.maxLife;
-    X.fillStyle=this.col; X.fillRect(this.wx|0,(this.wy-camY)|0,2,2);
+    X.fillStyle=this.col; X.fillRect(this.wx|0,(this.wy-camY)|0,this.size,this.size);
     X.globalAlpha=1;
   }
 }
-function spawnIceParticles(wx,wy){ for(let i=0;i<8;i++) iceParticles.push(new IceParticle(wx,wy)); }
+function spawnIceParticles(wx,wy){
+  // Spawn below the broken tile (where the player can see them)
+  for(let i=0;i<12;i++) iceParticles.push(new IceParticle(wx+(Math.random()-0.5)*12, wy+TILE));
+}
 
 // ── World ───────────────────────────────────────────────
 class World {
@@ -587,7 +593,9 @@ class World {
   }
 
   getTile(row, col) {
-    if(row<0||row>=this.ROWS||col<0||col>=COLS) return T_SOLID;
+    if(col<0||col>=COLS) return T_SOLID;   // paredes laterales
+    if(row<0) return T_SOLID;              // techo superior
+    if(row>=this.ROWS) return T_EMPTY;    // vacío abajo → jugador cae y muere
     const key = row+'_'+col;
     if(this.broken[key] !== undefined) return T_EMPTY;
     return this.rows[row][col];
@@ -871,14 +879,13 @@ class Player {
       }
     }
 
-    // Jumping up — hit ice ceiling: BREAK IT and bounce slightly
+    // Jumping up — hit ceiling
     if(this.vy < 0) {
       const t1 = world.getTile(top,col1), t2 = world.getTile(top,col2);
       if(t1===T_ICE||t2===T_ICE){
+        // Break ice and continue through on same jump (no bounce)
         const b1=world.breakIce(top,col1), b2=world.breakIce(top,col2);
         if(b1||b2){ initAC(); sfxBreak(); this.score+=100; }
-        this.wy=(top+1)*TILE;
-        this.vy=Math.abs(this.vy)*0.12; // small bounce back down, then jump through the hole
       }
       if(t1===T_SOLID||t2===T_SOLID){
         this.wy=(top+1)*TILE;
