@@ -78,6 +78,7 @@ const X = C.getContext('2d');
 X.imageSmoothingEnabled = false;
 
 const NW = 256, NH = 240, TILE = 16, COLS = 16;
+let highScore = parseInt(localStorage.getItem('iceClimberHiScore')||'0');
 
 const isTouch = () => window.matchMedia('(pointer:coarse)').matches;
 function resize() {
@@ -509,6 +510,54 @@ function seededRng(seed) {
   };
 }
 
+// ── Snow ────────────────────────────────────────────────
+const snowParticles = [];
+function initSnow() {
+  for(let i=0;i<40;i++) snowParticles.push({
+    x:Math.random()*256, y:Math.random()*240,
+    vy:0.3+Math.random()*0.5, vx:(Math.random()-0.5)*0.3, size:Math.random()<0.3?2:1
+  });
+}
+function updateDrawSnow() {
+  X.fillStyle='rgba(220,240,255,0.7)';
+  snowParticles.forEach(s=>{
+    s.y+=s.vy; s.x+=s.vx;
+    if(s.y>240) s.y=-2; if(s.x<0) s.x=256; if(s.x>256) s.x=0;
+    X.fillRect(s.x|0,s.y|0,s.size,s.size);
+  });
+}
+initSnow();
+
+// ── Screen Shake ─────────────────────────────────────────
+let shakeTimer=0, shakeIntensity=0, shakeOffX=0, shakeOffY=0;
+function triggerShake(intensity,duration){ shakeIntensity=intensity; shakeTimer=duration; }
+function updateShake(){
+  if(shakeTimer>0){
+    shakeTimer--;
+    const s=shakeIntensity*(shakeTimer/8);
+    shakeOffX=(Math.random()-0.5)*s*2; shakeOffY=(Math.random()-0.5)*s*2;
+  } else { shakeOffX=0; shakeOffY=0; }
+}
+
+// ── Ice Particles ────────────────────────────────────────
+const iceParticles = [];
+class IceParticle {
+  constructor(wx,wy){
+    this.wx=wx; this.wy=wy;
+    this.vx=(Math.random()-0.5)*4; this.vy=-Math.random()*3-1;
+    this.life=30+Math.random()*20|0; this.maxLife=this.life;
+    this.col=Math.random()<0.5?'#A0D8F8':'#D8F4FF';
+  }
+  update(){ this.vy+=0.2; this.wx+=this.vx; this.wy+=this.vy; this.life--; }
+  draw(camY){
+    if(this.life<=0)return;
+    X.globalAlpha=this.life/this.maxLife;
+    X.fillStyle=this.col; X.fillRect(this.wx|0,(this.wy-camY)|0,2,2);
+    X.globalAlpha=1;
+  }
+}
+function spawnIceParticles(wx,wy){ for(let i=0;i<8;i++) iceParticles.push(new IceParticle(wx,wy)); }
+
 // ── World ───────────────────────────────────────────────
 class World {
   constructor(round) {
@@ -550,6 +599,8 @@ class World {
     const key = row+'_'+col;
     if(this.broken[key] !== undefined) return false;
     this.broken[key] = 240;
+    triggerShake(3, 8);
+    spawnIceParticles(col*TILE+8, row*TILE+8);
     return true;
   }
 
@@ -572,6 +623,7 @@ class World {
     // Sky background
     X.fillStyle = skyCol;
     X.fillRect(0,0,NW,NH);
+    updateDrawSnow();
 
     // Stars (for dark rounds)
     if(round%6===1||round%6===4) {
@@ -684,6 +736,23 @@ class Nitpicker {
   getBounds() { return {x:this.wx+3,y:this.wy+3,w:10,h:10}; }
 }
 
+// ── Floating Text ────────────────────────────────────────
+const floatingTexts = [];
+class FloatingText {
+  constructor(wx,wy,text,color){
+    this.wx=wx; this.wy=wy; this.text=text; this.color=color||'#F8D800';
+    this.life=60; this.maxLife=60; this.vy=-0.6;
+  }
+  update(){ this.wy+=this.vy; this.life--; }
+  draw(camY){
+    if(this.life<=0)return;
+    X.globalAlpha=this.life/this.maxLife;
+    X.fillStyle=this.color; X.font='6px '+PF;
+    X.fillText(this.text,this.wx|0,(this.wy-camY)|0);
+    X.globalAlpha=1;
+  }
+}
+
 // ── Player ──────────────────────────────────────────────
 class Player {
   constructor(wx, charIdx) {
@@ -700,11 +769,14 @@ class Player {
     this.hammerTimer = 0;
     this.frame = 0; this.frameTimer = 0;
     this.invTimer = 0;
+    this.comboCount = 0; this.comboTimer = 0;
   }
 
   update(world, input, camY) {
     if(!this.alive) return;
     if(this.invTimer>0) this.invTimer--;
+    if(this.comboTimer>0) this.comboTimer--;
+    else if(this.comboTimer===0 && this.comboCount>0) this.comboCount=0;
 
     const SPEED = 1.6, JUMP = -5.0, GRAV = 0.3, MAXFALL = 5.5;
 
@@ -712,6 +784,8 @@ class Player {
     if(input.L){ this.vx = -SPEED; this.facing=-1; }
     else if(input.R){ this.vx = SPEED; this.facing=1; }
     else { this.vx *= 0.6; if(Math.abs(this.vx)<0.1) this.vx=0; }
+    // Wind
+    if(gs.round >= 3 && windForce !== 0) this.vx += windForce * 0.06;
 
     // Jump
     if(input.J && this.onGround){ this.vy=JUMP; this.onGround=false; initAC(); sfxJump(); }
@@ -768,7 +842,13 @@ class Player {
     let broke = false;
     if(world.breakIce(headRow,col1)) broke=true;
     if(col2!==col1 && world.breakIce(headRow,col2)) broke=true;
-    if(broke){ initAC(); sfxBreak(); this.score+=100; }
+    if(broke){
+      this.comboCount++; this.comboTimer=45;
+      const pts=100*this.comboCount; this.score+=pts;
+      const col=this.comboCount>=3?'#F84000':this.comboCount>=2?'#F8A000':'#F8D800';
+      floatingTexts.push(new FloatingText(this.wx, this.wy-8, this.comboCount>1?'+'+pts+' x'+this.comboCount:'+'+pts, col));
+      initAC(); sfxBreak();
+    }
   }
 
   resolveCollision(world) {
@@ -865,18 +945,26 @@ function drawHUD(players, round, twoPlayer) {
     // Score
     X.fillStyle='#F8F8F8'; X.font='6px '+PF;
     X.fillText((i===0?'P1:':'P2:')+p.score.toString().padStart(6,'0'), xOff+4, 9);
-    // Lives as small characters
+    // Lives as mini character sprites
     for(let l=0;l<p.lives;l++){
-      const liw = xOff + w - 16 - l*10;
-      // Tiny heart/char icon
-      X.fillStyle = CHARS[p.charIdx].body;
-      X.fillRect(liw,2,8,8);
+      const liw = xOff + w - 14 - l*11;
+      X.save(); X.translate(liw,1); X.scale(0.5,0.5);
+      drawChar(0,0,p.charIdx,0,1,false);
+      X.restore();
     }
   }
 
   // Round info
   X.fillStyle='#F8D800'; X.font='6px '+PF;
   X.fillText('MTN '+(round+1), NW/2-18, 9);
+  // Wind indicator
+  if(round >= 3 && Math.abs(windForce) > 0.08){
+    const arrow = windForce > 0 ? '>' : '<';
+    X.globalAlpha=Math.min(1,Math.abs(windForce)*2);
+    X.fillStyle='#A8DCFF'; X.font='7px '+PF;
+    X.fillText('~'+arrow, NW/2+20, 9);
+    X.globalAlpha=1;
+  }
 }
 
 const PF = '"Press Start 2P", monospace';
@@ -902,6 +990,8 @@ function drawTextCX(text, cx, y, col, size) {
 }
 
 // ── Game State Machine ───────────────────────────────────
+let windForce=0, windChangeTimer=0;
+
 let gs = { state:'title', round:0, twoPlayer:false, players:[], world:null,
            camY:0, tick:0, charSel:[0,1], selStep:0, flashTimer:0,
            bonusTimer:0, respawnTimers:[] };
@@ -1034,6 +1124,7 @@ function drawTitle(tick) {
 
   // Subtitle
   drawCenteredText('JUNIORS PRODUCCIONES', 90, '#F8D800', 8);
+  if(highScore > 0) drawCenteredText('HI: '+highScore.toString().padStart(6,'0'), 100, '#F8A000', 7);
 
   // Characters preview — 46px spacing, centered on 256px canvas
   const cx = [28,74,120,166,212];
@@ -1105,6 +1196,7 @@ function drawGameOver(tick) {
   gs.players.forEach((p,i)=>{
     drawCenteredText((i===0?'P1':'P2')+' '+CHARS[p.charIdx].name+': '+p.score, 120+i*16, '#F8F8F8', 8);
   });
+  drawCenteredText('HI: '+highScore.toString().padStart(6,'0'), 152, '#F8A000', 7);
   if(Math.floor(tick/20)%2===0) drawCenteredText('ENTER = volver al menú', 170, '#F8D800', 7);
 }
 
@@ -1167,6 +1259,12 @@ function loop(ts) {
     const world = gs.world;
     const players = gs.players;
 
+    // Wind mechanic (rounds 3+)
+    if(gs.round >= 3){
+      windChangeTimer--;
+      if(windChangeTimer<=0){ windForce=(Math.random()-0.5)*0.7; windChangeTimer=150+Math.random()*150|0; }
+    } else { windForce=0; }
+
     // Update players
     players.forEach((p,i)=>{
       if(p.alive){
@@ -1189,14 +1287,31 @@ function loop(ts) {
 
     // Check game over: all players dead with 0 lives
     const allDead = players.every(p=>!p.alive&&p.lives<=0);
-    if(allDead){ gs.state='gameover'; gs.tick=0; stopGameMusic(); initAC(); playFC(); }
+    if(allDead){
+      const topScore=Math.max(...players.map(p=>p.score));
+      if(topScore>highScore){ highScore=topScore; localStorage.setItem('iceClimberHiScore',highScore); }
+      gs.state='gameover'; gs.tick=0; stopGameMusic(); initAC(); playFC();
+    }
 
     world.update();
     gs.camY = updateCamera(gs.camY, players, world, dt);
 
-    // Draw
+    // Draw (with screen shake)
+    updateShake();
+    X.save(); X.translate(shakeOffX, shakeOffY);
     world.draw(gs.camY, gs.round);
     players.forEach(p=>p.draw(gs.camY));
+    // Ice particles
+    for(let i=iceParticles.length-1;i>=0;i--){
+      iceParticles[i].update(); iceParticles[i].draw(gs.camY);
+      if(iceParticles[i].life<=0) iceParticles.splice(i,1);
+    }
+    // Floating score texts
+    for(let i=floatingTexts.length-1;i>=0;i--){
+      floatingTexts[i].update(); floatingTexts[i].draw(gs.camY);
+      if(floatingTexts[i].life<=0) floatingTexts.splice(i,1);
+    }
+    X.restore();
     drawHUD(players, gs.round, gs.twoPlayer);
 
     // Climbing height bar (right side)
