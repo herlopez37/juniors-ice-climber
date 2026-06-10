@@ -12,8 +12,6 @@ html,body { width:100%; height:100%; background:#000; overflow:hidden; touch-act
 body { display:flex; flex-direction:column; align-items:center; justify-content:center; }
 canvas { image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
 #ctrl { color:#555; font:10px monospace; margin-top:6px; text-align:center; letter-spacing:.5px; }
-
-/* ── Touch controls ───────────────────────────────────── */
 #tui {
   display:none;
   position:fixed; bottom:0; left:0; right:0;
@@ -68,7 +66,7 @@ canvas { image-rendering:pixelated; image-rendering:crisp-edges; display:block; 
     <button class="tb" id="tb-j">↑<small>Z</small></button>
   </div>
 </div>
-<div id="ctrl">P1: ← → &nbsp; Z=Saltar &nbsp; X=Martillo &nbsp;|&nbsp; P2: A D &nbsp; G=Saltar &nbsp; H=Martillo &nbsp;|&nbsp; ENTER=Confirmar</div>
+<div id="ctrl">P1: ← → &nbsp; Z=Saltar &nbsp; X=Martillo/Poder(aire) &nbsp;|&nbsp; P2: A D &nbsp; G=Saltar &nbsp; H=Martillo/Poder(aire) &nbsp;|&nbsp; ENTER=Confirmar</div>
 <script>
 // ═══════════════════════════════════════════════════════
 // ICE CLIMBER — Juniors Producciones
@@ -147,6 +145,13 @@ function sfxStep(){ beep(200,.03,'square',.06); }
 function sfxBonus(){ [784,988,1175].forEach((f,i)=>beep(f,.1,'square',.12,i*.09)); }
 function sfxSelect(){ beep(660,.08,'square',.1); }
 function sfxEnemy(){ beep(150,.1,'sawtooth',.12); }
+function sfxPower(type){
+  if(type==='DASH'){ beep(660,.1,'square',.15); beep(990,.1,'square',.12,.1); }
+  else if(type==='WAVE'){ beep(110,.4,'sawtooth',.2); beep(220,.3,'sawtooth',.15,.1); }
+  else if(type==='STOMP'){ beep(100,.15,'square',.2); }
+  else if(type==='FLOAT'){ beep(880,.15,'square',.1); beep(1100,.1,'square',.08,.12); }
+  else if(type==='FLY'){ beep(440,.1,'square',.12); beep(880,.2,'square',.1,.08); }
+}
 
 // ── Music: The Final Countdown ──────────────────────────
 const _fc = { timer:null, nodes:[] };
@@ -164,12 +169,11 @@ function playFC() {
     E4:329.63, Fs4:369.99, G4:392.00, A4:440.00, B4:493.88,
     C5:523.25, D5:587.33, E5:659.25
   };
-  // Main synth melody (chorus hook — The Final Countdown)
   const mel=[
-    [n.B4,e],[n.A4,e],[n.B4,q],[n.E5,dq],[n.D5,e],   // bar 1
-    [n.B4,q],[n.A4,e],[n.G4,e],[n.A4,q],[n.E4,q],    // bar 2
-    [n.B4,e],[n.A4,e],[n.B4,q],[n.E5,dq],[n.D5,e],   // bar 3 (repeat)
-    [n.B4,q],[n.A4,e],[n.B4,e],[n.C5,q],[n.D5,q],    // bar 4
+    [n.B4,e],[n.A4,e],[n.B4,q],[n.E5,dq],[n.D5,e],
+    [n.B4,q],[n.A4,e],[n.G4,e],[n.A4,q],[n.E4,q],
+    [n.B4,e],[n.A4,e],[n.B4,q],[n.E5,dq],[n.D5,e],
+    [n.B4,q],[n.A4,e],[n.B4,e],[n.C5,q],[n.D5,q],
   ];
   const dur=mel.reduce((s,[,d])=>s+d,0);
   function sched(fr,dt,dl,vol,type='sawtooth'){
@@ -191,7 +195,7 @@ function playFC() {
   _fc.timer=setTimeout(playFC,dur*1000-60);
 }
 
-// ── Music: Gameplay (action loop) ─────────────────────
+// ── Music: Gameplay ────────────────────────────────────
 const _gm = { timer:null, nodes:[] };
 function stopGameMusic() {
   clearTimeout(_gm.timer); _gm.timer=null;
@@ -201,13 +205,11 @@ function stopGameMusic() {
 function playGameMusic() {
   if(!AC) return;
   stopGameMusic();
-  // Fast-paced action melody ~140 BPM (8-note loop)
   const bpm=140, b=60/bpm, e=b/2, q=b;
   const n={
     C4:261.63, D4:293.66, E4:329.63, F4:349.23,
     G4:392.00, A4:440.00, Bb4:466.16, C5:523.25
   };
-  // Urgent 8-note ascending/descending phrase
   const mel=[
     [n.C4,e],[n.E4,e],[n.G4,e],[n.C5,e],
     [n.Bb4,e],[n.G4,e],[n.E4,e],[n.D4,q]
@@ -227,7 +229,6 @@ function playGameMusic() {
   }
   let t=0;
   mel.forEach(([f,d])=>{sched(f,d,t,0.10);t+=d;});
-  // Driving bass (root note pulsing every beat)
   for(let i=0;i<4;i++) sched(n.C4/2,e*0.9,i*q,0.06,'sawtooth');
   _gm.timer=setTimeout(playGameMusic,dur*1000-40);
 }
@@ -236,14 +237,30 @@ function playGameMusic() {
 const SKY = ['#3898F0','#201898','#98380C','#084808','#5820B0','#085858'];
 const MTN = ['#2050C0','#1010A0','#803010','#105010','#481898','#0C7070'];
 
-// ── Sprites ─────────────────────────────────────────────
-// Characters: Junior(0) Cera(1) Rodri(2) Anto(3) MilagrosSosa(4)
+// ── Characters ──────────────────────────────────────────
 const CHARS = [
-  { name:'Junior',        body:'#0038F8',hat:'#C00000',accent:'#F83000',skin:'#FCA044',witch:false },
-  { name:'Cera',          body:'#101010',hat:'#101010',accent:'#303060',skin:'#FCA044',witch:false },
-  { name:'Rodri',         body:'#8B4513',hat:'#8B4513',accent:'#C08040',skin:'#C08040',witch:false },
-  { name:'Anto',          body:'#E018B0',hat:'#F8D800',accent:'#F840C8',skin:'#FCA044',witch:false },
-  { name:'Milagros Sosa', body:'#380068',hat:'#101010',accent:'#7800C8',skin:'#38C838',witch:true },
+  { name:'Junior',        body:'#0038F8',hat:'#C00000',accent:'#F83000',skin:'#FCA044',witch:false,
+    power:'DASH',  powerName:'SUPER DASH',     powerShort:'DASH',  powerCol:'#F8D800' },
+  { name:'Cera',          body:'#101010',hat:'#101010',accent:'#303060',skin:'#FCA044',witch:false,
+    power:'WAVE',  powerName:'ONDA SONICA',    powerShort:'ONDA',  powerCol:'#00C8FF' },
+  { name:'Rodri',         body:'#8B4513',hat:'#8B4513',accent:'#C08040',skin:'#C08040',witch:false,
+    power:'STOMP', powerName:'PISOTON',        powerShort:'STOMP', powerCol:'#F86000' },
+  { name:'Anto',          body:'#E018B0',hat:'#F8D800',accent:'#F840C8',skin:'#FCA044',witch:false,
+    power:'FLOAT', powerName:'FLOTACION',      powerShort:'FLOAT', powerCol:'#FF88FF' },
+  { name:'Milagros Sosa', body:'#380068',hat:'#101010',accent:'#7800C8',skin:'#38C838',witch:true,
+    power:'FLY',   powerName:'VUELO MAGICO',   powerShort:'VUELO', powerCol:'#A000FF' },
+];
+
+// ── Difficulty & Story ───────────────────────────────────
+const DIFFICULTIES = [
+  { label:'FACIL',   enemyMult:0.5, windMax:0,   invFrames:180, iceFactor:300 },
+  { label:'NORMAL',  enemyMult:1.0, windMax:0.7, invFrames:120, iceFactor:240 },
+  { label:'DIFICIL', enemyMult:1.5, windMax:1.4, invFrames:60,  iceFactor:150 },
+];
+const STORIES = [
+  { name:'CUMBRE NEVADA', desc:'Conquista la cima helada', skyOff:0, scoreMult:1.0 },
+  { name:'RESCATE',       desc:'Salva a tus amigos!',      skyOff:2, scoreMult:1.2 },
+  { name:'TORNEO',        desc:'El mas rapido gana',       skyOff:4, scoreMult:1.5 },
 ];
 
 function px(x,y,w,h,col){ X.fillStyle=col; X.fillRect(x,y,w,h); }
@@ -255,150 +272,90 @@ function drawChar(cx, cy, ci, frame, facing, hammer) {
   const ay = hammer ? cy+5 : cy+8;
 
   if(ci===0) {
-    // ── Junior — Superhero ──────────────────────────────
-    // Cape (behind body, red)
     px(cx,cy+7,3,9,'#C00000'); px(cx+13,cy+7,3,9,'#C00000');
-    // Head
     px(cx+4,cy+0,8,1,ch.skin); px(cx+3,cy+1,10,4,ch.skin);
-    // Hero mask (blue, across eyes)
     px(cx+3,cy+2,4,2,'#2050F8'); px(cx+9,cy+2,4,2,'#2050F8');
-    px(cx+5,cy+3,2,1,'#FFFFFF'); px(cx+10,cy+3,2,1,'#FFFFFF'); // eye glints
-    // Nose + mouth
+    px(cx+5,cy+3,2,1,'#FFFFFF'); px(cx+10,cy+3,2,1,'#FFFFFF');
     px(cx+7,cy+5,2,1,'#C07030'); px(cx+5,cy+6,6,1,'#401000');
-    // Blue bodysuit
     px(cx+2,cy+7,12,5,ch.body);
-    // Red "J" on chest
     px(cx+8,cy+8,3,1,'#F83000'); px(cx+10,cy+8,1,3,'#F83000');
     px(cx+8,cy+11,3,1,'#F83000'); px(cx+8,cy+10,1,1,'#F83000');
-    // Arms
     px(cx,ay,2,4,ch.body); px(cx+14,ay,2,4,ch.body);
     if(hammer){ px(cx-1,ay-1,3,2,'#F8D800'); px(cx+14,ay-1,3,2,'#F8D800'); }
-    // Legs
     if(frame===0){ px(cx+3,cy+12,5,3,ch.body); px(cx+8,cy+12,5,3,ch.body); }
     else { px(cx+2,cy+11,5,4,ch.body); px(cx+9,cy+13,5,3,ch.body); }
-    // Red boots
     px(cx+2,cy+15,5,1,ch.hat); px(cx+9,cy+15,5,1,ch.hat);
 
   } else if(ci===1) {
-    // ── Cera — Gustavo Cerati (rock musician) ──────────
-    // Spiky black hair
     px(cx+3,cy,10,3,ch.hat);
-    // Spikes
-    for(const [sx,sh] of [[4,3],[7,4],[10,3]]){
-      px(cx+sx,cy,2,sh,ch.hat);
-    }
-    // Face
+    for(const [sx,sh] of [[4,3],[7,4],[10,3]]){ px(cx+sx,cy,2,sh,ch.hat); }
     px(cx+3,cy+4,10,4,ch.skin);
-    // Sunglasses (cool dark lenses)
     px(cx+3,cy+5,4,2,'#101010'); px(cx+9,cy+5,4,2,'#101010'); px(cx+7,cy+5,2,1,'#181818');
-    px(cx+3,cy+5,1,2,'#484848'); px(cx+6,cy+5,1,2,'#484848'); // lens frames
+    px(cx+3,cy+5,1,2,'#484848'); px(cx+6,cy+5,1,2,'#484848');
     px(cx+9,cy+5,1,2,'#484848'); px(cx+12,cy+5,1,2,'#484848');
-    // Nose, smirk
     px(cx+7,cy+7,2,1,'#C07030'); px(cx+7,cy+8,4,1,'#401000');
-    // Black leather jacket
     px(cx+2,cy+8,12,5,ch.body);
-    // Jacket lapels (dark gray V-neck)
     px(cx+4,cy+8,3,5,'#282828'); px(cx+9,cy+8,3,5,'#282828');
-    px(cx+6,cy+8,4,4,'#383838'); // inner shirt
-    // Arms
+    px(cx+6,cy+8,4,4,'#383838');
     px(cx,ay,2,4,ch.body); px(cx+14,ay,2,4,ch.body);
     if(hammer){ px(cx-1,ay-1,3,2,'#808080'); px(cx+14,ay-1,3,2,'#808080'); }
-    // Dark jeans
     if(frame===0){ px(cx+3,cy+13,5,3,'#1C1C50'); px(cx+8,cy+13,5,3,'#1C1C50'); }
     else { px(cx+2,cy+12,5,4,'#1C1C50'); px(cx+9,cy+14,5,3,'#1C1C50'); }
-    // Dark boots
     px(cx+2,cy+15,5,1,'#201010'); px(cx+9,cy+15,5,1,'#201010');
 
   } else if(ci===2) {
-    // ── Rodri — Fat Bear ───────────────────────────────
-    // Bear ears (rounded bumps)
-    px(cx+1,cy,4,3,ch.body); px(cx+2,cy+1,2,2,ch.accent); // left ear
-    px(cx+11,cy,4,3,ch.body); px(cx+12,cy+1,2,2,ch.accent); // right ear
-    // Wide round face
+    px(cx+1,cy,4,3,ch.body); px(cx+2,cy+1,2,2,ch.accent);
+    px(cx+11,cy,4,3,ch.body); px(cx+12,cy+1,2,2,ch.accent);
     px(cx+1,cy+3,14,5,ch.body); px(cx+2,cy+2,12,6,ch.body);
-    // Lighter snout (oval in center)
     px(cx+4,cy+5,8,3,ch.accent);
-    // Eyes (small, beady, wide apart)
     px(cx+2,cy+4,2,2,'#101010'); px(cx+12,cy+4,2,2,'#101010');
-    px(cx+2,cy+3,2,1,'#101010'); px(cx+12,cy+3,2,1,'#101010'); // brow fur
-    // Nose (big, black)
+    px(cx+2,cy+3,2,1,'#101010'); px(cx+12,cy+3,2,1,'#101010');
     px(cx+6,cy+6,4,1,'#101010');
-    // Wide chubby body (full 16px width = FAT!)
     px(cx,cy+8,16,5,ch.body);
-    // Light belly patch
     px(cx+3,cy+9,10,4,ch.accent);
-    // Stubby arms (pudgy)
     px(cx-1,ay,3,4,ch.body); px(cx+14,ay,3,4,ch.body);
     if(hammer){ px(cx-2,ay-1,4,2,'#A06020'); px(cx+14,ay-1,4,2,'#A06020'); }
-    // Short fat legs
     if(frame===0){ px(cx+2,cy+13,5,3,ch.body); px(cx+9,cy+13,5,3,ch.body); }
     else { px(cx+1,cy+12,5,4,ch.body); px(cx+10,cy+13,5,4,ch.body); }
-    // Paws
     px(cx+1,cy+15,6,1,'#601000'); px(cx+9,cy+15,6,1,'#601000');
 
   } else if(ci===3) {
-    // ── Anto — Princess ────────────────────────────────
-    // Gold crown
-    for(const [sx,sh] of [[4,3],[7,4],[10,3]]){
-      px(cx+sx,cy,2,sh,ch.hat);
-    }
-    px(cx+3,cy+2,10,2,ch.hat); // crown base band
-    // Gems on crown
+    for(const [sx,sh] of [[4,3],[7,4],[10,3]]){ px(cx+sx,cy,2,sh,ch.hat); }
+    px(cx+3,cy+2,10,2,ch.hat);
     px(cx+4,cy+1,2,1,'#F80000'); px(cx+7,cy,2,1,'#60C8FF'); px(cx+10,cy+1,2,1,'#38E000');
-    // Long golden hair (sides)
     px(cx+1,cy+4,3,9,'#F8C820'); px(cx+12,cy+4,3,9,'#F8C820');
-    // Face
     px(cx+3,cy+4,10,4,ch.skin);
-    // Big princess eyes with lashes
     px(cx+4,cy+5,3,2,'#101010'); px(cx+9,cy+5,3,2,'#101010');
-    px(cx+4,cy+4,3,1,'#101010'); px(cx+9,cy+4,3,1,'#101010'); // lashes
-    px(cx+5,cy+5,1,1,'#FFFFFF'); px(cx+10,cy+5,1,1,'#FFFFFF'); // eye shine
-    // Blush + smile
+    px(cx+4,cy+4,3,1,'#101010'); px(cx+9,cy+4,3,1,'#101010');
+    px(cx+5,cy+5,1,1,'#FFFFFF'); px(cx+10,cy+5,1,1,'#FFFFFF');
     px(cx+3,cy+7,2,1,'#F8A0A0'); px(cx+11,cy+7,2,1,'#F8A0A0');
     px(cx+5,cy+8,6,1,'#800000');
-    // Dress bodice
     px(cx+2,cy+8,12,3,ch.body);
-    px(cx+7,cy+8,2,3,'#F8F8F8'); // pearl necklace center
-    // Flowing skirt (wider at bottom)
+    px(cx+7,cy+8,2,3,'#F8F8F8');
     px(cx+1,cy+11,14,5,ch.accent);
     px(cx,cy+13,16,3,ch.accent);
-    // Princess sleeves/arms
     px(cx,ay-1,2,3,ch.skin); px(cx+14,ay-1,2,3,ch.skin);
     if(hammer){ px(cx-1,ay-2,3,2,'#F8D800'); px(cx+14,ay-2,3,2,'#F8D800'); }
-    // Feet peeking under skirt
     px(cx+4,cy+15,4,1,'#F0D0A0'); px(cx+8,cy+15,4,1,'#F0D0A0');
 
   } else {
-    // ── Milagros Sosa — Witch ──────────────────────────
-    // Pointy black hat
     X.fillStyle=ch.hat;
     X.beginPath(); X.moveTo(cx+8,cy); X.lineTo(cx+2,cy+5); X.lineTo(cx+14,cy+5); X.fill();
-    px(cx+1,cy+5,14,2,ch.hat); // brim
-    // Purple hat band
+    px(cx+1,cy+5,14,2,ch.hat);
     px(cx+1,cy+5,14,1,ch.accent);
-    // Green face
     px(cx+3,cy+7,10,5,ch.skin);
-    // Angry slanted brows
     px(cx+3,cy+7,4,1,'#006000'); px(cx+9,cy+7,4,1,'#006000');
-    // Angry eyes
     px(cx+4,cy+8,2,2,'#101010'); px(cx+10,cy+8,2,2,'#101010');
-    px(cx+4,cy+8,1,1,'#F8F800'); px(cx+10,cy+8,1,1,'#F8F800'); // glowing pupils
-    // Wart bumps
+    px(cx+4,cy+8,1,1,'#F8F800'); px(cx+10,cy+8,1,1,'#F8F800');
     px(cx+6,cy+10,2,2,'#1A8A1A'); px(cx+12,cy+11,2,1,'#1A8A1A');
-    // Pointy nose
     X.fillStyle='#2A8A2A';
     X.beginPath(); X.moveTo(cx+7,cy+9); X.lineTo(cx+11,cy+12); X.lineTo(cx+6,cy+12); X.fill();
-    // Evil grin with fang
     px(cx+5,cy+11,6,1,'#101010'); px(cx+6,cy+10,1,1,'#FFFFFF'); px(cx+10,cy+10,1,1,'#FFFFFF');
-    // Purple robe
     px(cx+1,cy+12,14,4,ch.accent); px(cx+3,cy+12,10,4,ch.body);
-    // Arms
     px(cx,ay,2,5,ch.accent); px(cx+14,ay,2,5,ch.accent);
     if(hammer){ px(cx-1,ay-1,3,2,'#F8D800'); px(cx+14,ay-1,3,2,'#F8D800'); }
-    // Robe bottom / legs
     if(frame===0){ px(cx+3,cy+15,4,2,ch.body); px(cx+9,cy+15,4,2,ch.body); }
     else { px(cx+2,cy+14,4,3,ch.body); px(cx+10,cy+16,3,2,ch.body); }
-    // Curled shoes
     px(cx+2,cy+16,5,1,'#101010'); px(cx+9,cy+16,5,1,'#101010');
   }
 
@@ -406,99 +363,65 @@ function drawChar(cx, cy, ci, frame, facing, hammer) {
 }
 
 function drawTopi(cx, cy, frame) {
-  // Topi: seal/polar bear enemy
-  // White body, gray details
-  px(cx+3,cy+2,10,8,'#F0F0F0');   // body
-  px(cx+4,cy+2,8,5,'#F8F8F8');    // lighter center
-  px(cx+5,cy+3,2,2,'#202020');    // left eye
-  px(cx+9,cy+3,2,2,'#202020');    // right eye
-  px(cx+6,cy+5,4,1,'#E08080');    // nose/mouth
-  px(cx+1,cy+6,3,3,'#D0D0D0');    // left fin
-  px(cx+12,cy+6,3,3,'#D0D0D0');   // right fin
-  // Belly
+  px(cx+3,cy+2,10,8,'#F0F0F0'); px(cx+4,cy+2,8,5,'#F8F8F8');
+  px(cx+5,cy+3,2,2,'#202020'); px(cx+9,cy+3,2,2,'#202020');
+  px(cx+6,cy+5,4,1,'#E08080');
+  px(cx+1,cy+6,3,3,'#D0D0D0'); px(cx+12,cy+6,3,3,'#D0D0D0');
   px(cx+4,cy+7,8,3,'#F0E8E0');
-  // Feet
   if(frame===0){ px(cx+3,cy+10,4,2,'#C0C0C0'); px(cx+9,cy+10,4,2,'#C0C0C0'); }
   else         { px(cx+2,cy+10,4,2,'#C0C0C0'); px(cx+10,cy+10,4,2,'#C0C0C0'); }
 }
 
 function drawNitpicker(cx, cy, frame) {
-  // Nitpicker: bird enemy
   const wing = frame===0 ? cy+3 : cy+6;
-  px(cx+3,cy+4,10,7,'#F8C000');   // body
-  px(cx+2,wing,12,3,'#F8A000');   // wings
-  px(cx+6,cy+3,6,3,'#F8C000');    // head
-  px(cx+7,cy+3,2,2,'#000');       // eye
-  px(cx+10,cy+5,4,2,'#F86000');   // beak
-  px(cx+5,cy+10,6,2,'#F86000');   // feet
+  px(cx+3,cy+4,10,7,'#F8C000'); px(cx+2,wing,12,3,'#F8A000');
+  px(cx+6,cy+3,6,3,'#F8C000'); px(cx+7,cy+3,2,2,'#000');
+  px(cx+10,cy+5,4,2,'#F86000'); px(cx+5,cy+10,6,2,'#F86000');
 }
 
 // ── Level Generation ────────────────────────────────────
-// Original Ice Climber structure:
-//   Each floor = 2 EMPTY rows (player walks here) + 1 PLATFORM row
-//   Platform row has SOLID stone pillars + ICE blocks + pre-existing GAPS
-//   Player jumps UP from empty space and hits ICE from below to break through
-
 const T_EMPTY=0, T_SOLID=1, T_ICE=2;
 const TOTAL_FLOORS = 8;
-const TOTAL_ROWS   = 3 + TOTAL_FLOORS*3 + 2; // 29 rows = 464px
+const TOTAL_ROWS   = 3 + TOTAL_FLOORS*3 + 2;
 
 function emptyRow(){ return new Array(COLS).fill(T_EMPTY); }
 function solidRow(){ return new Array(COLS).fill(T_SOLID); }
 
 function makePlatRow(rng, round, floorIdx) {
-  // Mixed row: solid walls at edges, then groups of solid pillars + ice blocks + gaps
   const row = new Array(COLS).fill(T_EMPTY);
-  row[0] = row[COLS-1] = T_SOLID; // always solid outer walls
-
-  // Gap chance = pre-existing holes (decreases as you go higher / in later rounds)
+  row[0] = row[COLS-1] = T_SOLID;
   const gapChance = Math.max(0.06, 0.28 - round*0.015 - floorIdx*0.008);
-
   let col = 1;
   while(col < COLS-1) {
     const r = rng();
     if(r < gapChance) {
-      // Pre-existing gap (1-2 wide)
       const gw = rng() < 0.4 ? 2 : 1;
       for(let i=0; i<gw && col<COLS-1; i++) row[col++] = T_EMPTY;
     } else if(r < gapChance + 0.22) {
-      // Solid stone pillar (1-2 wide)
       const sw = rng() < 0.45 ? 2 : 1;
       for(let i=0; i<sw && col<COLS-1; i++) row[col++] = T_SOLID;
     } else {
-      // Ice block (1-3 wide — non-uniform!)
       const iw = rng() < 0.45 ? 2 : rng() < 0.5 ? 3 : 1;
       for(let i=0; i<iw && col<COLS-1; i++) row[col++] = T_ICE;
     }
   }
-
-  // Guarantee at least one traversable gap
-  if(!row.slice(1,COLS-1).some(t=>t===T_EMPTY)){
-    row[Math.floor(COLS/2)] = T_EMPTY;
-  }
+  if(!row.slice(1,COLS-1).some(t=>t===T_EMPTY)){ row[Math.floor(COLS/2)] = T_EMPTY; }
   return row;
 }
 
 function buildLevel(round) {
   const rng = seededRng(round * 31337 + 7);
   const rows = [];
-
-  // Bonus area (very top — solid ceiling + open air + breakable entry)
-  rows.push(solidRow());  // row 0: solid ceiling (finish area)
-  rows.push(emptyRow());  // row 1: open bonus area
-  rows.push(emptyRow());  // row 2: open air above entry platform
-
-  // 8 floors — each is: 2 EMPTY (walking) + 1 MIXED PLATFORM (ceiling to break)
+  rows.push(solidRow());
+  rows.push(emptyRow());
+  rows.push(emptyRow());
   for(let f=0; f<TOTAL_FLOORS; f++) {
-    rows.push(emptyRow());               // row 3+f*3+0: upper empty
-    rows.push(emptyRow());               // row 3+f*3+1: lower empty
-    rows.push(makePlatRow(rng,round,f)); // row 3+f*3+2: mixed platform ceiling
+    rows.push(emptyRow());
+    rows.push(emptyRow());
+    rows.push(makePlatRow(rng,round,f));
   }
-
-  // Void bottom
   rows.push(emptyRow());
   rows.push(emptyRow());
-
   return rows;
 }
 
@@ -542,12 +465,12 @@ function updateShake(){
 // ── Ice Particles ────────────────────────────────────────
 const iceParticles = [];
 class IceParticle {
-  constructor(wx,wy){
+  constructor(wx,wy,col){
     this.wx=wx; this.wy=wy;
     this.vx=(Math.random()-0.5)*5;
-    this.vy=Math.random()*2+0.5; // cae hacia abajo (visible al jugador)
+    this.vy=Math.random()*2+0.5;
     this.life=40+Math.random()*20|0; this.maxLife=this.life;
-    const cols=['#A0D8F8','#D8F4FF','#FFFFFF','#6898C0'];
+    const cols=col?[col,'#FFFFFF']:['#A0D8F8','#D8F4FF','#FFFFFF','#6898C0'];
     this.col=cols[Math.floor(Math.random()*cols.length)];
     this.size=Math.random()<0.4?4:3;
   }
@@ -559,9 +482,8 @@ class IceParticle {
     X.globalAlpha=1;
   }
 }
-function spawnIceParticles(wx,wy){
-  // Spawn below the broken tile (where the player can see them)
-  for(let i=0;i<12;i++) iceParticles.push(new IceParticle(wx+(Math.random()-0.5)*12, wy+TILE));
+function spawnIceParticles(wx,wy,col){
+  for(let i=0;i<12;i++) iceParticles.push(new IceParticle(wx+(Math.random()-0.5)*12, wy+TILE, col));
 }
 
 // ── World ───────────────────────────────────────────────
@@ -571,7 +493,6 @@ class World {
     this.rows = buildLevel(round);
     this.ROWS = this.rows.length;
     this.HEIGHT = this.ROWS * TILE;
-    // Breakable ice state: broken[row][col] = framesLeft
     this.broken = {};
     this.enemies = [];
     this.spawnEnemies(round);
@@ -579,12 +500,12 @@ class World {
 
   spawnEnemies(round) {
     const rng = seededRng(round * 99991);
-    const numTopi = Math.min(3 + Math.floor(round/2), 8);
+    const mult = gs.diffSettings ? gs.diffSettings.enemyMult : 1.0;
+    const numTopi = Math.min(Math.round((3 + Math.floor(round/2)) * mult), 10);
     for(let i=0; i<numTopi; i++) {
-      const floor = Math.floor(rng()*6)+1; // floors 1-6
-      const pRow = 3 + floor*3 + 2;        // platform row
+      const floor = Math.floor(rng()*6)+1;
+      const pRow = 3 + floor*3 + 2;
       const col  = Math.floor(rng()*(COLS-3))+1;
-      // Topi walks in the EMPTY row just above the platform
       this.enemies.push(new Topi(col*TILE, pRow*TILE-TILE, pRow));
     }
     if(round >= 3) {
@@ -593,9 +514,9 @@ class World {
   }
 
   getTile(row, col) {
-    if(col<0||col>=COLS) return T_SOLID;   // paredes laterales
-    if(row<0) return T_SOLID;              // techo superior
-    if(row>=this.ROWS) return T_EMPTY;    // vacío abajo → jugador cae y muere
+    if(col<0||col>=COLS) return T_SOLID;
+    if(row<0) return T_SOLID;
+    if(row>=this.ROWS) return T_EMPTY;
     const key = row+'_'+col;
     if(this.broken[key] !== undefined) return T_EMPTY;
     return this.rows[row][col];
@@ -606,7 +527,8 @@ class World {
     if(this.rows[row][col] !== T_ICE) return false;
     const key = row+'_'+col;
     if(this.broken[key] !== undefined) return false;
-    this.broken[key] = 240;
+    const iceFactor = gs.diffSettings ? gs.diffSettings.iceFactor : 240;
+    this.broken[key] = iceFactor;
     triggerShake(3, 8);
     spawnIceParticles(col*TILE+8, row*TILE+8);
     return true;
@@ -621,19 +543,15 @@ class World {
     this.enemies = this.enemies.filter(e=>e.alive);
   }
 
-  // World pixel Y → screen Y given cameraY
-  toSY(wy, camY) { return wy - camY; }
-
   draw(camY, round) {
-    const skyCol = SKY[round % SKY.length];
-    const mtnCol = MTN[round % MTN.length];
+    const skyIdx = (round + (gs.story ? STORIES[gs.story].skyOff : 0)) % SKY.length;
+    const skyCol = SKY[skyIdx];
+    const mtnCol = MTN[skyIdx];
 
-    // Sky background
     X.fillStyle = skyCol;
     X.fillRect(0,0,NW,NH);
     updateDrawSnow();
 
-    // Stars (for dark rounds)
     if(round%6===1||round%6===4) {
       X.fillStyle='#FFFFFF';
       const rng=seededRng(round*777);
@@ -643,7 +561,6 @@ class World {
       }
     }
 
-    // Tiles — per-column type: T_SOLID or T_ICE or T_EMPTY
     for(let row=0; row<this.ROWS; row++){
       const sy = row*TILE - camY;
       if(sy>NH+TILE||sy<-TILE) continue;
@@ -653,7 +570,8 @@ class World {
         const sx = col*TILE;
         const key = row+'_'+col;
         if(this.broken[key]!==undefined){
-          X.globalAlpha = this.broken[key]/240*0.3;
+          const iceFactor = gs.diffSettings ? gs.diffSettings.iceFactor : 240;
+          X.globalAlpha = this.broken[key]/iceFactor*0.3;
           drawIceTile(sx,sy,true);
           X.globalAlpha=1;
           continue;
@@ -669,21 +587,20 @@ class World {
 
 function drawPlatformTile(sx, sy, col) {
   px(sx,sy,TILE,TILE,col);
-  px(sx,sy,TILE,2,'#FFFFFF'); // highlight top
+  px(sx,sy,TILE,2,'#FFFFFF');
   px(sx,sy+2,TILE,1,'rgba(255,255,255,0.3)');
-  px(sx,sy+TILE-2,TILE,2,'rgba(0,0,0,0.3)'); // shadow bottom
+  px(sx,sy+TILE-2,TILE,2,'rgba(0,0,0,0.3)');
 }
 
 function drawIceTile(sx, sy, ghost) {
   px(sx+1,sy+1,TILE-2,TILE-2,'#A0D8F8');
-  px(sx+1,sy+1,TILE-2,2,'#D8F4FF'); // top highlight
-  px(sx+1,sy+1,2,TILE-2,'#D8F4FF'); // left highlight
-  px(sx+TILE-3,sy+1,2,TILE-2,'#6898C0'); // right shadow
-  px(sx+1,sy+TILE-3,TILE-2,2,'#6898C0'); // bottom shadow
+  px(sx+1,sy+1,TILE-2,2,'#D8F4FF');
+  px(sx+1,sy+1,2,TILE-2,'#D8F4FF');
+  px(sx+TILE-3,sy+1,2,TILE-2,'#6898C0');
+  px(sx+1,sy+TILE-3,TILE-2,2,'#6898C0');
   if(!ghost){
-    // Snowflake details
     X.fillStyle='#C8ECFF';
-    X.fillRect(sx+6,sy+4,4,1); X.fillRect(sx+7,sy+3,2,3); // simple cross
+    X.fillRect(sx+6,sy+4,4,1); X.fillRect(sx+7,sy+3,2,3);
     X.fillRect(sx+5,sy+5,1,1); X.fillRect(sx+10,sy+5,1,1);
     X.fillRect(sx+5,sy+9,1,1); X.fillRect(sx+10,sy+9,1,1);
     X.fillRect(sx+6,sy+11,4,1); X.fillRect(sx+7,sy+10,2,3);
@@ -701,16 +618,12 @@ class Topi {
   }
   update(world) {
     this.wx += this.vx;
-    // Wrap
     if(this.wx < 0) this.wx = NW - TILE;
     if(this.wx > NW-TILE) this.wx = 0;
-    // Stay on platform
     this.wy = this.platRow * TILE - TILE;
-    // Reverse at edges of platform
     const nextX = this.wx + this.vx * 4;
     const col = Math.floor((nextX+8)/TILE);
     if(world.getTile(this.platRow,col) === T_EMPTY) this.vx *= -1;
-    // Animation
     this.frameTimer++;
     if(this.frameTimer>10){ this.frameTimer=0; this.frame^=1; }
   }
@@ -766,7 +679,7 @@ class Player {
   constructor(wx, charIdx) {
     this.charIdx = charIdx;
     this.wx = wx;
-    this.wy = 0; // set by game
+    this.wy = 0;
     this.vx = 0; this.vy = 0;
     this.w = 14; this.h = 16;
     this.onGround = false;
@@ -778,6 +691,12 @@ class Player {
     this.frame = 0; this.frameTimer = 0;
     this.invTimer = 0;
     this.comboCount = 0; this.comboTimer = 0;
+    // Power
+    this.powerType = CHARS[charIdx].power;
+    this.powerCooldown = 0;
+    this.powerActive = 0;
+    this.stompLanded = false;
+    this.dashActive = false;
   }
 
   update(world, input, camY) {
@@ -786,7 +705,7 @@ class Player {
     if(this.comboTimer>0) this.comboTimer--;
     else if(this.comboTimer===0 && this.comboCount>0) this.comboCount=0;
 
-    const SPEED = 1.6, JUMP = -5.0, GRAV = 0.3, MAXFALL = 5.5;
+    const SPEED = 1.6, JUMP = -6.0, GRAV = 0.3, MAXFALL = 5.5;
 
     // Horizontal
     if(input.L){ this.vx = -SPEED; this.facing=-1; }
@@ -798,11 +717,33 @@ class Player {
     // Jump
     if(input.J && this.onGround){ this.vy=JUMP; this.onGround=false; initAC(); sfxJump(); }
 
-    // Hammer
+    // Hammer (ground) or Power (air)
     if(this.hammerTimer>0) this.hammerTimer--;
+    if(this.powerCooldown>0) this.powerCooldown--;
     if(input.H && this.hammerTimer===0){
-      this.hammerTimer=18;
-      this.tryBreak(world);
+      if(this.onGround){ this.hammerTimer=18; this.tryBreak(world); }
+      else if(this.powerCooldown===0){ this.hammerTimer=10; this.activatePower(world); }
+    }
+
+    // Active power ongoing effects
+    if(this.powerActive>0){
+      this.powerActive--;
+      if(this.powerType==='FLOAT' && !this.onGround) this.vy=Math.min(this.vy,0.35);
+      if(this.powerType==='FLY'   && !this.onGround) this.vy=Math.max(this.vy-0.5,-4.0);
+      if(this.powerType==='DASH') this.vx=this.facing*9;
+    }
+    // STOMP landing
+    if(this.powerType==='STOMP' && this.onGround && this.powerActive>0 && !this.stompLanded){
+      this.stompLanded=true; this.powerActive=0;
+      const br=Math.floor((this.wy+this.h)/TILE), bc=Math.floor(this.wx/TILE);
+      for(let dc=-2;dc<=2;dc++){
+        if(world.breakIce(br,bc+dc)){
+          this.score+=Math.round(100*gs.scoreMult);
+          spawnIceParticles(bc*TILE+dc*TILE+8, br*TILE+8, CHARS[this.charIdx].powerCol);
+        }
+      }
+      triggerShake(7,20); initAC(); beep(80,.3,'square',.2);
+      floatingTexts.push(new FloatingText(this.wx,this.wy-10,'CRASH!','#F86000'));
     }
 
     // Gravity
@@ -811,7 +752,6 @@ class Player {
 
     // Move X
     this.wx += this.vx;
-    // Wrap X
     if(this.wx < -this.w) this.wx = NW;
     if(this.wx > NW) this.wx = -this.w;
 
@@ -826,24 +766,58 @@ class Player {
       if(this.frameTimer>7){ this.frameTimer=0; this.frame^=1; }
     } else { this.frame=0; }
 
-    // Death: fall below camera bottom + buffer OR fall off world
-    if(this.wy > world.HEIGHT + 32){
-      this.die(world);
-    }
+    // Death
+    if(this.wy > world.HEIGHT + 32){ this.die(world); }
 
-    // Check enemy collisions
+    // Enemy collisions
     if(this.invTimer===0){
       world.enemies.forEach(e=>{
         if(!e.alive) return;
-        const eb = e.getBounds();
-        const pb = this.getBounds();
+        const eb = e.getBounds(), pb = this.getBounds();
         if(rectsOverlap(pb,eb)){ this.die(world); }
       });
     }
   }
 
+  activatePower(world) {
+    const pt = this.powerType;
+    this.powerCooldown = 300;
+    this.powerActive = 0;
+    this.stompLanded = false;
+    initAC();
+    const ch = CHARS[this.charIdx];
+    floatingTexts.push(new FloatingText(this.wx-10, this.wy-16, ch.powerName, ch.powerCol));
+    sfxPower(pt);
+
+    if(pt==='DASH'){
+      this.powerActive=22;
+      this.invTimer=Math.max(this.invTimer,22);
+    } else if(pt==='WAVE'){
+      const row=Math.floor(this.wy/TILE), bc=Math.floor(this.wx/TILE);
+      let n=0;
+      for(let dr=-2;dr<=0;dr++){
+        for(let dc=-4;dc<=4;dc++){
+          if(world.breakIce(row+dr,bc+dc)){
+            n++;
+            spawnIceParticles((bc+dc)*TILE+8, (row+dr)*TILE+8, ch.powerCol);
+          }
+        }
+      }
+      if(n>0){ this.score+=Math.round(n*150*gs.scoreMult); triggerShake(5,15); }
+      this.powerActive=15;
+    } else if(pt==='STOMP'){
+      this.vy=7;
+      this.powerActive=120;
+    } else if(pt==='FLOAT'){
+      if(this.vy>0) this.vy=0;
+      this.powerActive=120;
+    } else if(pt==='FLY'){
+      this.vy=-3;
+      this.powerActive=80;
+    }
+  }
+
   tryBreak(world) {
-    // Hammer swings at the ceiling (row directly above player's head)
     const headRow = Math.floor(this.wy/TILE);
     const col1 = Math.floor((this.wx+1)/TILE);
     const col2 = Math.floor((this.wx+this.w-2)/TILE);
@@ -852,7 +826,7 @@ class Player {
     if(col2!==col1 && world.breakIce(headRow,col2)) broke=true;
     if(broke){
       this.comboCount++; this.comboTimer=45;
-      const pts=100*this.comboCount; this.score+=pts;
+      const pts=Math.round(100*this.comboCount*gs.scoreMult); this.score+=pts;
       const col=this.comboCount>=3?'#F84000':this.comboCount>=2?'#F8A000':'#F8D800';
       floatingTexts.push(new FloatingText(this.wx, this.wy-8, this.comboCount>1?'+'+pts+' x'+this.comboCount:'+'+pts, col));
       initAC(); sfxBreak();
@@ -865,7 +839,6 @@ class Player {
     const bot  = Math.floor((this.wy+this.h)/TILE);
     const top  = Math.floor(this.wy/TILE);
 
-    // Landing — can land on T_SOLID or T_ICE from above
     if(this.vy >= 0) {
       const t1 = world.getTile(bot,col1), t2 = world.getTile(bot,col2);
       if(t1===T_SOLID||t2===T_SOLID||t1===T_ICE||t2===T_ICE){
@@ -879,13 +852,11 @@ class Player {
       }
     }
 
-    // Jumping up — hit ceiling
     if(this.vy < 0) {
       const t1 = world.getTile(top,col1), t2 = world.getTile(top,col2);
       if(t1===T_ICE||t2===T_ICE){
-        // Break ice and continue through on same jump (no bounce)
         const b1=world.breakIce(top,col1), b2=world.breakIce(top,col2);
-        if(b1||b2){ initAC(); sfxBreak(); this.score+=100; }
+        if(b1||b2){ initAC(); sfxBreak(); this.score+=Math.round(100*gs.scoreMult); }
       }
       if(t1===T_SOLID||t2===T_SOLID){
         this.wy=(top+1)*TILE;
@@ -899,30 +870,49 @@ class Player {
     this.lives--;
     initAC(); sfxDie();
     this.alive = false;
+    this.powerActive = 0;
   }
 
   respawn(world) {
-    // Start on bottom platform
-    const startRow = 3 + (TOTAL_FLOORS-1)*3 + 2; // last floor's platform row
+    const startRow = 3 + (TOTAL_FLOORS-1)*3 + 2;
     this.wy = startRow*TILE - this.h;
     this.vx=0; this.vy=0;
     this.onGround=false;
     this.alive=true;
-    this.invTimer=120;
+    this.powerActive=0; this.stompLanded=false;
+    this.invTimer = gs.diffSettings ? gs.diffSettings.invFrames : 120;
   }
 
   getBounds(){ return {x:this.wx+1,y:this.wy+1,w:this.w-2,h:this.h-2}; }
 
   draw(camY) {
     if(!this.alive) return;
-    if(this.invTimer>0 && Math.floor(this.invTimer/4)%2===0) return; // blink
+    if(this.invTimer>0 && Math.floor(this.invTimer/4)%2===0) return;
     const sx = Math.round(this.wx);
     const sy = Math.round(this.wy-camY);
     if(sy < -this.h-4 || sy > NH+4) return;
+
+    // Power glow
+    if(this.powerActive>0 && this.powerCooldown>270){
+      const ch = CHARS[this.charIdx];
+      X.globalAlpha = 0.5*(Math.sin(gs.tick*0.4)*0.5+0.5);
+      X.fillStyle = ch.powerCol;
+      X.fillRect(sx-2,sy-2,this.w+4,this.h+4);
+      X.globalAlpha=1;
+    }
+    // FLY: upward star trail
+    if(this.powerType==='FLY' && this.powerActive>0){
+      X.fillStyle='#C880FF'; X.globalAlpha=0.6;
+      for(let i=0;i<3;i++){
+        const ty=(sy+this.h+(i*5))%NH;
+        X.fillRect(sx+Math.random()*14|0,ty,2,2);
+      }
+      X.globalAlpha=1;
+    }
+
     drawChar(sx, sy, this.charIdx, this.frame, this.facing, this.hammerTimer>8);
   }
 
-  // World Y of player top (climbing progress)
   get progress(){ return this.wy; }
 }
 
@@ -932,7 +922,6 @@ function rectsOverlap(a,b){
 
 // ── Camera ──────────────────────────────────────────────
 function updateCamera(camY, players, world, dt) {
-  // Follow the highest player
   let minWY = world.HEIGHT;
   players.forEach(p=>{ if(p.alive && p.wy < minWY) minWY=p.wy; });
   const target = Math.max(0, Math.min(world.HEIGHT-NH, minWY - NH*0.65));
@@ -941,9 +930,8 @@ function updateCamera(camY, players, world, dt) {
 
 // ── HUD ─────────────────────────────────────────────────
 function drawHUD(players, round, twoPlayer) {
-  // Score bar at top
   X.fillStyle='#000018';
-  X.fillRect(0,0,NW,12);
+  X.fillRect(0,0,NW,16);
 
   for(let i=0;i<players.length;i++){
     const p = players[i];
@@ -952,19 +940,30 @@ function drawHUD(players, round, twoPlayer) {
     // Score
     X.fillStyle='#F8F8F8'; X.font='6px '+PF;
     X.fillText((i===0?'P1:':'P2:')+p.score.toString().padStart(6,'0'), xOff+4, 9);
-    // Lives as mini character sprites
+    // Lives
     for(let l=0;l<p.lives;l++){
       const liw = xOff + w - 14 - l*11;
       X.save(); X.translate(liw,1); X.scale(0.5,0.5);
       drawChar(0,0,p.charIdx,0,1,false);
       X.restore();
     }
+    // Power bar (3px strip at bottom of HUD)
+    const bx = xOff+4;
+    const bww = (twoPlayer ? 76 : 110);
+    X.fillStyle='#001820'; X.fillRect(bx,12,bww,3);
+    const pct = p.powerCooldown===0 ? 1 : 1-(p.powerCooldown/300);
+    const ch = CHARS[p.charIdx];
+    const powerOn = p.powerActive>0;
+    X.fillStyle = powerOn
+      ? (Math.floor(gs.tick/3)%2===0?'#FFFFFF':ch.powerCol)
+      : (p.powerCooldown===0?'#00FFAA':ch.powerCol);
+    X.fillRect(bx,12,Math.round(bww*pct),3);
   }
 
-  // Round info
+  // Round + story info
   X.fillStyle='#F8D800'; X.font='6px '+PF;
   X.fillText('MTN '+(round+1), NW/2-18, 9);
-  // Wind indicator
+  // Wind
   if(round >= 3 && Math.abs(windForce) > 0.08){
     const arrow = windForce > 0 ? '>' : '<';
     X.globalAlpha=Math.min(1,Math.abs(windForce)*2);
@@ -996,18 +995,173 @@ function drawTextCX(text, cx, y, col, size) {
   X.fillText(text, Math.floor(cx-w/2), y);
 }
 
+// ── Mode Select ──────────────────────────────────────────
+function drawModeSelect(tick) {
+  X.fillStyle='#000C20'; X.fillRect(0,0,NW,NH);
+  // Stars
+  X.fillStyle='#FFFFFF';
+  const sr=seededRng(77);
+  for(let i=0;i<35;i++) X.fillRect(sr()*NW|0,sr()*(NH*0.7)|0,1,1);
+
+  drawCenteredText('MODO DE JUEGO', 18, '#F8D800', 8);
+
+  // ── Difficulty row ──
+  const diffActive = gs.modeRow===0;
+  X.fillStyle = diffActive?'rgba(255,255,255,0.06)':'transparent';
+  if(diffActive) X.fillRect(4,24,NW-8,26);
+  drawCenteredText('DIFICULTAD', 34, diffActive?'#FFFFFF':'#555', 6);
+  const diffW=70, diffGap=4, diffTotalW=3*diffW+2*diffGap, diffX=(NW-diffTotalW)/2;
+  DIFFICULTIES.forEach((d,i)=>{
+    const bx=diffX+i*(diffW+diffGap), by=37;
+    const sel=gs.difficulty===i;
+    X.fillStyle=sel?(diffActive?'#1A3860':'#0A1820'):'#080C14';
+    X.fillRect(bx,by,diffW,14);
+    if(sel && diffActive){ X.strokeStyle='#F8D800'; X.lineWidth=1; X.strokeRect(bx+0.5,by+0.5,diffW-1,13); }
+    else if(sel){ X.strokeStyle='#555'; X.lineWidth=1; X.strokeRect(bx+0.5,by+0.5,diffW-1,13); }
+    const tcol=sel?(diffActive?'#F8D800':'#AAA'):'#444';
+    drawTextCX(d.label, bx+diffW/2, by+10, tcol, 5);
+  });
+
+  // ── Story row ──
+  const storActive = gs.modeRow===1;
+  if(storActive) { X.fillStyle='rgba(255,255,255,0.06)'; X.fillRect(4,60,NW-8,50); }
+  drawCenteredText('HISTORIA', 72, storActive?'#FFFFFF':'#555', 6);
+  const st = STORIES[gs.story];
+  // Arrow buttons
+  drawTextCX(gs.story>0?'<':'', 22, 92, storActive?'#A0C8FF':'#333', 8);
+  drawTextCX(gs.story<2?'>':'', NW-22, 92, storActive?'#A0C8FF':'#333', 8);
+  // Story name
+  drawCenteredText(st.name, 92, storActive?'#F8D800':'#888', 7);
+  // Score mult badge
+  const smul=st.scoreMult>1.0?'x'+st.scoreMult.toFixed(1)+' SCORE':'';
+  drawCenteredText(st.desc, 104, storActive?'#A0C8FF':'#444', 5);
+  if(smul) drawCenteredText(smul, 111, storActive?'#00FFAA':'#334', 5);
+
+  // ── Controls hint ──
+  drawCenteredText(diffActive?'< > elegir  Enter confirmar':'< > elegir  Enter confirmar', 130, '#444', 5);
+  drawCenteredText('arriba/abajo: cambiar fila', 139, '#333', 5);
+  if(Math.floor(tick/20)%2===0) drawCenteredText('ENTER = continuar', 155, '#F8F8F8', 6);
+  drawCenteredText('ESC = titulo', 168, '#333', 5);
+}
+
+// ── Title Screen ─────────────────────────────────────────
+function drawTitle(tick) {
+  X.fillStyle='#000830'; X.fillRect(0,0,NW,NH);
+  X.fillStyle='#FFFFFF';
+  const sr=seededRng(42);
+  for(let i=0;i<50;i++){ X.fillRect(sr()*NW|0,(sr()*NH*0.6)|0,1,1); }
+
+  X.fillStyle='#102060';
+  X.beginPath(); X.moveTo(0,NH); X.lineTo(40,120); X.lineTo(80,80);
+  X.lineTo(128,40); X.lineTo(176,80); X.lineTo(216,120); X.lineTo(NW,NH); X.fill();
+
+  X.fillStyle='#E8F4FF';
+  X.beginPath(); X.moveTo(120,44); X.lineTo(136,58); X.lineTo(128,40); X.fill();
+
+  drawCenteredText('ICE CLIMBER', 72, '#A8DCFF', 16);
+  drawCenteredText('ICE CLIMBER', 71, '#FFFFFF', 16);
+  drawCenteredText('JUNIORS PRODUCCIONES', 90, '#F8D800', 8);
+  if(highScore > 0) drawCenteredText('HI: '+highScore.toString().padStart(6,'0'), 100, '#F8A000', 7);
+
+  const cx = [28,74,120,166,212];
+  CHARS.forEach((ch,i)=>{
+    drawChar(cx[i], 104, i, (tick>>3)&1, 1, false);
+    drawTextCX(ch.name.split(' ')[0], cx[i]+8, 128, '#C8C8C8', 5);
+  });
+
+  if(Math.floor(tick/20)%2===0)
+    drawCenteredText('PRESIONA ENTER', 175, '#F8F800', 8);
+
+  drawCenteredText('1-2 jugadores', 188, '#A8A8A8', 7);
+  drawCenteredText('Z=Saltar  X=Martillo', 200, '#686868', 7);
+  drawCenteredText('© 2026 Juniors Producciones', 230, '#484848', 6);
+}
+
+// ── Character Select ─────────────────────────────────────
+function drawCharSelect(tick) {
+  X.fillStyle='#001028'; X.fillRect(0,0,NW,NH);
+  drawCenteredText('ELEGIR PERSONAJE', 14, '#F8D800', 7);
+
+  const step = gs.selStep;
+  const labCol = step===0 ? '#6888FF' : '#FF88CC';
+  drawCenteredText(step===0?'JUGADOR 1':'JUGADOR 2', 26, labCol, 6);
+
+  CHARS.forEach((ch,i)=>{
+    const sx = 28 + i*46, sy = 44;
+    const sel = gs.charSel[step]===i;
+    if(sel){
+      X.fillStyle = step===0 ? '#F8D800' : '#FF88CC';
+      X.fillRect(sx-3,sy-3,22,26);
+    }
+    if(gs.twoPlayer && step===1 && gs.charSel[0]===i){
+      X.fillStyle='#884400'; X.fillRect(sx-1,sy-1,18,20);
+    }
+    drawChar(sx, sy, i, (tick>>3)&1, 1, false);
+    const nm = ch.name.split(' ')[0];
+    drawTextCX(nm, sx+8, sy+26, sel?'#F8D800':'#C8C8C8', 5);
+    // Power short name
+    drawTextCX(ch.powerShort, sx+8, sy+34, sel?ch.powerCol:'#404040', 5);
+  });
+
+  if(step===1){
+    drawCenteredText('P1: '+CHARS[gs.charSel[0]].name.split(' ')[0], 90, '#6888FF', 6);
+  }
+
+  if(step===0){
+    const t1c = !gs.twoPlayer ? '#F8D800' : '#666';
+    const t2c =  gs.twoPlayer ? '#F8D800' : '#666';
+    drawCenteredText((!gs.twoPlayer?'>':' ')+' 1 JUGADOR',  110, t1c, 6);
+    drawCenteredText(( gs.twoPlayer?'>':' ')+' 2 JUGADORES', 122, t2c, 6);
+    drawCenteredText('ARRIBA/ABAJO=MODO', 136, '#555', 5);
+  }
+
+  // Power hint for selected char
+  const sc = CHARS[gs.charSel[step]];
+  drawCenteredText('PODER: '+sc.powerName, 152, sc.powerCol, 5);
+  drawCenteredText('Activar: X en el aire', 161, '#444', 5);
+
+  if(Math.floor(tick/20)%2===0)
+    drawCenteredText('ENTER=CONFIRMAR', 174, '#F8F8F8', 6);
+}
+
+// ── Game Over ────────────────────────────────────────────
+function drawGameOver(tick) {
+  X.fillStyle='#000000'; X.fillRect(0,0,NW,NH);
+  drawCenteredText('GAME OVER', 90, '#F80000', 16);
+  gs.players.forEach((p,i)=>{
+    drawCenteredText((i===0?'P1':'P2')+' '+CHARS[p.charIdx].name+': '+p.score, 120+i*16, '#F8F8F8', 8);
+  });
+  drawCenteredText('HI: '+highScore.toString().padStart(6,'0'), 152, '#F8A000', 7);
+  if(Math.floor(tick/20)%2===0) drawCenteredText('ENTER = volver al menu', 170, '#F8D800', 7);
+}
+
+// ── Round Clear ──────────────────────────────────────────
+function drawRoundClear(tick) {
+  X.fillStyle='rgba(0,0,0,0.7)'; X.fillRect(0,0,NW,NH);
+  drawCenteredText('CUMBRE!', 90, '#F8D800', 16);
+  drawCenteredText('Montana '+(gs.round+1)+' completada', 114, '#F8F8F8', 8);
+  if(Math.floor(tick/15)%2===0) drawCenteredText('Preparate...', 140, '#A8A8F8', 7);
+}
+
 // ── Game State Machine ───────────────────────────────────
 let windForce=0, windChangeTimer=0;
 
-let gs = { state:'title', round:0, twoPlayer:false, players:[], world:null,
-           camY:0, tick:0, charSel:[0,1], selStep:0, flashTimer:0,
-           bonusTimer:0, respawnTimers:[] };
+let gs = {
+  state:'title', round:0, twoPlayer:false, players:[], world:null,
+  camY:0, tick:0, charSel:[0,1], selStep:0, flashTimer:0,
+  bonusTimer:0, respawnTimers:[],
+  difficulty:1, story:0, modeRow:0, storyIntro:0,
+  scoreMult:1.0, diffSettings:DIFFICULTIES[1]
+};
 
 function initGame(twoPlayer, chars) {
   stopFC();
   initAC(); playGameMusic();
   gs.twoPlayer = twoPlayer;
   gs.round = 0;
+  gs.diffSettings = DIFFICULTIES[gs.difficulty];
+  gs.scoreMult = STORIES[gs.story].scoreMult;
+  gs.storyIntro = 120;
   gs.players = [];
   const startRow = 3 + (TOTAL_FLOORS-1)*3 + 2;
   const p1 = new Player(NW/2 - 20, chars[0]);
@@ -1024,11 +1178,13 @@ function initGame(twoPlayer, chars) {
 
 function startNextRound() {
   gs.round++;
+  gs.diffSettings = DIFFICULTIES[gs.difficulty];
+  gs.scoreMult = STORIES[gs.story].scoreMult;
   const startRow = 3 + (TOTAL_FLOORS-1)*3 + 2;
   gs.world = new World(gs.round);
   gs.players.forEach(p=>{
     p.wy = startRow*TILE - p.h;
-    p.vx=0; p.vy=0; p.alive=true; p.invTimer=60;
+    p.vx=0; p.vy=0; p.alive=true; p.invTimer=60; p.powerActive=0;
   });
   gs.camY = gs.players[0].wy - NH*0.7;
   gs.state = 'playing';
@@ -1040,7 +1196,6 @@ function startBonus() {
   gs.state = 'bonus';
   gs.bonusTimer = 300;
   bonusItems = [];
-  // Spawn condor and falling veggies
   bonusItems.push({ type:'condor', x:NW*0.5, y:20, vx:2, vy:0, alive:true });
   for(let i=0;i<6;i++){
     bonusItems.push({
@@ -1058,40 +1213,35 @@ function updateBonus() {
     item.x += item.vx; item.y += item.vy;
     if(item.type==='condor'){
       if(item.x<0||item.x>NW-16) item.vx*=-1;
-      // Collect condor: player touches
       gs.players.forEach(p=>{
         if(!p.alive) return;
-        const sy = p.wy - gs.camY;
         if(Math.abs(p.wx-item.x)<16 && Math.abs(p.wy-gs.camY-item.y)<16){
-          item.alive=false; p.score+=1000; initAC(); sfxBonus();
+          item.alive=false; p.score+=Math.round(1000*gs.scoreMult); initAC(); sfxBonus();
         }
       });
     } else {
       if(item.y > NH) item.alive=false;
-      // Collect veggie
       gs.players.forEach(p=>{
         if(!p.alive) return;
         const sy = p.wy - gs.camY;
         const dx=p.wx-item.x, dy=sy-item.y;
-        if(Math.sqrt(dx*dx+dy*dy)<14){ item.alive=false; p.score+=200; initAC(); sfxBonus(); }
+        if(Math.sqrt(dx*dx+dy*dy)<14){ item.alive=false; p.score+=Math.round(200*gs.scoreMult); initAC(); sfxBonus(); }
       });
     }
   });
   if(gs.bonusTimer<=0 || !bonusItems.some(i=>i.alive&&i.type==='condor')){
-    // End bonus, next round
     setTimeout(startNextRound, 800);
     gs.state='round_clear';
   }
 }
 
 function drawBonus(camY) {
-  X.fillStyle=SKY[gs.round%SKY.length]; X.fillRect(0,0,NW,NH);
-  drawCenteredText('¡BONUS!', 30, '#F8D800', 16);
-  drawCenteredText('Agarrá el cóndor! '+gs.bonusTimer, 50, '#F8F8F8', 8);
+  X.fillStyle=SKY[(gs.round+STORIES[gs.story].skyOff)%SKY.length]; X.fillRect(0,0,NW,NH);
+  drawCenteredText('BONUS!', 30, '#F8D800', 16);
+  drawCenteredText('Agarra el condor! '+gs.bonusTimer, 50, '#F8F8F8', 8);
   bonusItems.forEach(item=>{
     if(!item.alive) return;
     if(item.type==='condor'){
-      // Draw condor (brown bird)
       px(item.x,item.y,16,12,'#804000');
       px(item.x+2,item.y,12,4,'#A05000');
       px(item.x+6,item.y+4,4,4,'#000');
@@ -1105,114 +1255,6 @@ function drawBonus(camY) {
   });
   gs.players.forEach(p=>p.draw(camY));
   drawHUD(gs.players, gs.round, gs.twoPlayer);
-}
-
-// ── Title Screen ─────────────────────────────────────────
-function drawTitle(tick) {
-  // Background
-  X.fillStyle='#000830'; X.fillRect(0,0,NW,NH);
-  // Stars
-  X.fillStyle='#FFFFFF';
-  const sr=seededRng(42);
-  for(let i=0;i<50;i++){ X.fillRect(sr()*NW|0,(sr()*NH*0.6)|0,1,1); }
-
-  // Mountain silhouette
-  X.fillStyle='#102060';
-  X.beginPath(); X.moveTo(0,NH); X.lineTo(40,120); X.lineTo(80,80);
-  X.lineTo(128,40); X.lineTo(176,80); X.lineTo(216,120); X.lineTo(NW,NH); X.fill();
-
-  // Snow caps
-  X.fillStyle='#E8F4FF';
-  X.beginPath(); X.moveTo(120,44); X.lineTo(136,58); X.lineTo(128,40); X.fill();
-
-  // Logo: ICE CLIMBER
-  drawCenteredText('ICE CLIMBER', 72, '#A8DCFF', 16);
-  drawCenteredText('ICE CLIMBER', 71, '#FFFFFF', 16);
-
-  // Subtitle
-  drawCenteredText('JUNIORS PRODUCCIONES', 90, '#F8D800', 8);
-  if(highScore > 0) drawCenteredText('HI: '+highScore.toString().padStart(6,'0'), 100, '#F8A000', 7);
-
-  // Characters preview — 46px spacing, centered on 256px canvas
-  const cx = [28,74,120,166,212];
-  CHARS.forEach((ch,i)=>{
-    drawChar(cx[i], 104, i, (tick>>3)&1, 1, false);
-    drawTextCX(ch.name.split(' ')[0], cx[i]+8, 128, '#C8C8C8', 5);
-  });
-
-  // Flash press start
-  if(Math.floor(tick/20)%2===0)
-    drawCenteredText('PRESIONA ENTER', 175, '#F8F800', 8);
-
-  drawCenteredText('1-2 jugadores', 188, '#A8A8A8', 7);
-  drawCenteredText('Z=Saltar  X=Martillo', 200, '#686868', 7);
-
-  // Small copyright
-  drawCenteredText('© 2026 Juniors Producciones', 230, '#484848', 6);
-}
-
-// ── Character Select ─────────────────────────────────────
-function drawCharSelect(tick) {
-  X.fillStyle='#001028'; X.fillRect(0,0,NW,NH);
-  drawCenteredText('ELEGIR PERSONAJE', 14, '#F8D800', 7);
-
-  const step = gs.selStep;
-  const labCol = step===0 ? '#6888FF' : '#FF88CC';
-  drawCenteredText(step===0?'JUGADOR 1':'JUGADOR 2', 26, labCol, 6);
-
-  // Characters — centered on 256px canvas (5×16px sprites, 30px gap → 200px total → start at 28)
-  CHARS.forEach((ch,i)=>{
-    const sx = 28 + i*46, sy = 44;
-    const sel = gs.charSel[step]===i;
-    // Selection glow
-    if(sel){
-      X.fillStyle = step===0 ? '#F8D800' : '#FF88CC';
-      X.fillRect(sx-3,sy-3,22,26);
-    }
-    if(gs.twoPlayer && step===1 && gs.charSel[0]===i){
-      X.fillStyle='#884400'; X.fillRect(sx-1,sy-1,18,20);
-    }
-    drawChar(sx, sy, i, (tick>>3)&1, 1, false);
-    // Name centered below sprite
-    const nm = ch.name.split(' ')[0];
-    drawTextCX(nm, sx+8, sy+28, sel?'#F8D800':'#C8C8C8', 5);
-  });
-
-  // P1 confirmed
-  if(step===1){
-    drawCenteredText('P1: '+CHARS[gs.charSel[0]].name.split(' ')[0], 84, '#6888FF', 6);
-  }
-
-  // Mode selector (step 0 only)
-  if(step===0){
-    const t1c = !gs.twoPlayer ? '#F8D800' : '#666';
-    const t2c =  gs.twoPlayer ? '#F8D800' : '#666';
-    drawCenteredText((!gs.twoPlayer?'>':' ')+' 1 JUGADOR',  104, t1c, 6);
-    drawCenteredText(( gs.twoPlayer?'>':' ')+' 2 JUGADORES', 116, t2c, 6);
-    drawCenteredText('ARRIBA/ABAJO=MODO', 132, '#555', 5);
-  }
-
-  if(Math.floor(tick/20)%2===0)
-    drawCenteredText('ENTER=CONFIRMAR', 158, '#F8F8F8', 6);
-}
-
-// ── Game Over ────────────────────────────────────────────
-function drawGameOver(tick) {
-  X.fillStyle='#000000'; X.fillRect(0,0,NW,NH);
-  drawCenteredText('GAME OVER', 90, '#F80000', 16);
-  gs.players.forEach((p,i)=>{
-    drawCenteredText((i===0?'P1':'P2')+' '+CHARS[p.charIdx].name+': '+p.score, 120+i*16, '#F8F8F8', 8);
-  });
-  drawCenteredText('HI: '+highScore.toString().padStart(6,'0'), 152, '#F8A000', 7);
-  if(Math.floor(tick/20)%2===0) drawCenteredText('ENTER = volver al menú', 170, '#F8D800', 7);
-}
-
-// ── Round Clear ──────────────────────────────────────────
-function drawRoundClear(tick) {
-  X.fillStyle='rgba(0,0,0,0.7)'; X.fillRect(0,0,NW,NH);
-  drawCenteredText('¡CUMBRE!', 90, '#F8D800', 16);
-  drawCenteredText('Montaña '+(gs.round+1)+' completada', 114, '#F8F8F8', 8);
-  if(Math.floor(tick/15)%2===0) drawCenteredText('Preparate...', 140, '#A8A8F8', 7);
 }
 
 // ── Main Loop ────────────────────────────────────────────
@@ -1229,61 +1271,75 @@ function loop(ts) {
   if(gs.state==='title') {
     drawTitle(gs.tick);
     if(jp('Enter')||jp('KeyZ')){
-      gs.state='char_select';
-      gs.charSel=[0,1]; gs.selStep=0; gs.twoPlayer=false;
+      gs.state='mode_select';
+      gs.modeRow=0;
       initAC(); sfxSelect(); playFC();
     }
   }
 
+  else if(gs.state==='mode_select') {
+    drawModeSelect(gs.tick);
+    if(jp('ArrowUp')||jp('KeyW'))   { gs.modeRow=Math.max(0,gs.modeRow-1); sfxSelect(); }
+    if(jp('ArrowDown')||jp('KeyS')) { gs.modeRow=Math.min(1,gs.modeRow+1); sfxSelect(); }
+    if(jp('ArrowLeft')||jp('KeyA')){
+      if(gs.modeRow===0) gs.difficulty=Math.max(0,gs.difficulty-1);
+      else               gs.story=Math.max(0,gs.story-1);
+      sfxSelect();
+    }
+    if(jp('ArrowRight')||jp('KeyD')){
+      if(gs.modeRow===0) gs.difficulty=Math.min(2,gs.difficulty+1);
+      else               gs.story=Math.min(2,gs.story+1);
+      sfxSelect();
+    }
+    if(jp('Enter')||jp('KeyZ')){
+      gs.state='char_select';
+      gs.charSel=[0,1]; gs.selStep=0; gs.twoPlayer=false;
+      sfxSelect();
+    }
+    if(jp('Escape')) { gs.state='title'; sfxSelect(); }
+  }
+
   else if(gs.state==='char_select') {
     drawCharSelect(gs.tick);
-    // Mode toggle (1/2 player) at step 0
     if(gs.selStep===0){
-      if((jp('ArrowUp')||jp('ArrowDown')||jp('KeyW')||jp('KeyS'))){ gs.twoPlayer=!gs.twoPlayer; sfxSelect(); }
+      if(jp('ArrowUp')||jp('ArrowDown')||jp('KeyW')||jp('KeyS')){ gs.twoPlayer=!gs.twoPlayer; sfxSelect(); }
     }
-    // Navigate characters
     if(jp('ArrowLeft')||jp('KeyA')){ gs.charSel[gs.selStep]=(gs.charSel[gs.selStep]+CHARS.length-1)%CHARS.length; sfxSelect(); }
     if(jp('ArrowRight')||jp('KeyD')){ gs.charSel[gs.selStep]=(gs.charSel[gs.selStep]+1)%CHARS.length; sfxSelect(); }
     if(jp('Enter')||jp('KeyZ')){
       sfxSelect();
       if(!gs.twoPlayer || gs.selStep===1){
-        // Start game
         initGame(gs.twoPlayer, gs.charSel);
       } else {
-        // Pick P2 character
         gs.selStep=1;
-        // Ensure P2 doesn't start on same as P1
         if(gs.charSel[1]===gs.charSel[0]) gs.charSel[1]=(gs.charSel[0]+1)%CHARS.length;
       }
     }
-    if(jp('Escape')) gs.state='title';
+    if(jp('Escape')) { gs.state='mode_select'; sfxSelect(); }
   }
 
   else if(gs.state==='playing') {
-    // Pause toggle
-    if(jp('KeyP') || jp('Escape')) { gs.state='paused'; }
+    if(jp('KeyP') || jp('Escape') || jp('Enter')) { gs.state='paused'; }
 
     const world = gs.world;
     const players = gs.players;
 
-    // Wind mechanic (rounds 3+)
-    if(gs.round >= 3){
+    // Wind
+    const wMax = gs.diffSettings ? gs.diffSettings.windMax : 0.7;
+    if(gs.round >= 3 && wMax > 0){
       windChangeTimer--;
-      if(windChangeTimer<=0){ windForce=(Math.random()-0.5)*0.7; windChangeTimer=150+Math.random()*150|0; }
+      if(windChangeTimer<=0){ windForce=(Math.random()-0.5)*wMax*2; windChangeTimer=150+Math.random()*150|0; }
     } else { windForce=0; }
 
-    // Update players
     players.forEach((p,i)=>{
       if(p.alive){
         p.update(world, i===0?p1Input():p2Input(), gs.camY);
-        // Check if player reached bonus area (top 4 rows)
         if(p.wy < 4*TILE && p.alive){
-          p.score += 500*(gs.round+1);
+          p.score += Math.round(500*(gs.round+1)*gs.scoreMult);
           startBonus();
           return;
         }
       } else {
-        // Respawn logic
         gs.respawnTimers[i] = (gs.respawnTimers[i]||0)+1;
         if(gs.respawnTimers[i]>120 && p.lives>0){
           gs.respawnTimers[i]=0;
@@ -1292,7 +1348,6 @@ function loop(ts) {
       }
     });
 
-    // Check game over: all players dead with 0 lives
     const allDead = players.every(p=>!p.alive&&p.lives<=0);
     if(allDead){
       const topScore=Math.max(...players.map(p=>p.score));
@@ -1303,17 +1358,14 @@ function loop(ts) {
     world.update();
     gs.camY = updateCamera(gs.camY, players, world, dt);
 
-    // Draw (with screen shake)
     updateShake();
     X.save(); X.translate(shakeOffX, shakeOffY);
     world.draw(gs.camY, gs.round);
     players.forEach(p=>p.draw(gs.camY));
-    // Ice particles
     for(let i=iceParticles.length-1;i>=0;i--){
       iceParticles[i].update(); iceParticles[i].draw(gs.camY);
       if(iceParticles[i].life<=0) iceParticles.splice(i,1);
     }
-    // Floating score texts
     for(let i=floatingTexts.length-1;i>=0;i--){
       floatingTexts[i].update(); floatingTexts[i].draw(gs.camY);
       if(floatingTexts[i].life<=0) floatingTexts.splice(i,1);
@@ -1321,7 +1373,7 @@ function loop(ts) {
     X.restore();
     drawHUD(players, gs.round, gs.twoPlayer);
 
-    // Climbing height bar (right side)
+    // Height bar
     const maxH = world.HEIGHT;
     const progH = 200;
     const progX = NW-6;
@@ -1331,22 +1383,30 @@ function loop(ts) {
       X.fillStyle = i===0 ? CHARS[p.charIdx].body : CHARS[p.charIdx].accent;
       X.fillRect(progX, 16+progH-(pct*progH)|0, 4, 4);
     });
-    // Summit marker
     X.fillStyle='#F8D800'; X.fillRect(progX-1,14,6,2);
+
+    // Story intro overlay
+    if(gs.storyIntro>0){
+      gs.storyIntro--;
+      const a=Math.min(gs.storyIntro/40,1);
+      X.globalAlpha=a*0.8; X.fillStyle='#000028'; X.fillRect(0,75,NW,55); X.globalAlpha=1;
+      X.globalAlpha=a;
+      const st=STORIES[gs.story];
+      drawCenteredText(st.name, 98, '#F8D800', 8);
+      drawCenteredText(st.desc, 113, '#A0C8FF', 6);
+      if(gs.diffSettings) drawCenteredText(DIFFICULTIES[gs.difficulty].label, 123, '#AAFFAA', 5);
+      X.globalAlpha=1;
+    }
   }
 
   else if(gs.state==='paused') {
-    // Draw the frozen world
     gs.world.draw(gs.camY, gs.round);
     gs.players.forEach(p=>p.draw(gs.camY));
     drawHUD(gs.players, gs.round, gs.twoPlayer);
-    // Semi-transparent overlay
     X.fillStyle='rgba(0,0,0,0.6)'; X.fillRect(0,0,NW,NH);
-    // Pause text
     drawCenteredText('PAUSA', NH/2-14, '#F8D800', 16);
-    drawCenteredText('P / ESC para continuar', NH/2+8, '#F8F8F8', 7);
-    // Resume
-    if(jp('KeyP') || jp('Escape')) { gs.state='playing'; }
+    drawCenteredText('P / ESC / START para continuar', NH/2+8, '#F8F8F8', 7);
+    if(jp('KeyP') || jp('Escape') || jp('Enter')) { gs.state='playing'; }
   }
 
   else if(gs.state==='bonus') {
@@ -1366,6 +1426,16 @@ function loop(ts) {
     if(jp('Enter')||jp('KeyZ')){ gs.state='title'; playFC(); }
   }
 }
+
+// Auto-pausa al cambiar de pestaña/app: no morir en background ni seguir sonando
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden){
+    if(gs.state==='playing') gs.state='paused';
+    if(AC && AC.state==='running') AC.suspend();
+  } else {
+    if(AC && AC.state==='suspended') AC.resume();
+  }
+});
 
 document.fonts.ready.then(()=>requestAnimationFrame(loop));
 </script>
